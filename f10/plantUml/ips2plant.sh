@@ -11,16 +11,17 @@
 #set -x
 set -e
 
-WORKDIR="ips2plantWorkdir"
+WORKDIR="workdir"
+MODEL_DIR="$WORKDIR/model"
 COLLECTION_XML="ips2plantCollection.xml"
-PATHS_TO_DIR="."
 MODEL_TYPE="policy"
 FILE_SUFFIX="ipspolicycmpttype"
 PRODUCT_FILE_SUFFIX="ipsproductcmpttype"
 CLASS_TAG="PolicyCmptType"
 PRODUCT_CLASS_TAG="ProductCmptType2"
+PUML_RESULT_FILE="output/ips-models.puml"
 OPTIONS=""
-CONNECTOR="---"
+CONNECTOR="--"
 
 usage() {
     cat <<EOT
@@ -30,17 +31,17 @@ $0 - template
 Usage: $0 [OPTIONS] <input>
 
 Options:
-  -o, --output               Output file path (should have .puml suffix). If none given, the output will be to stdout
-  -p, --paths-to-dir         Path(s) to root directory(ies) with .ipspolicycmpttype files. Default: '.'
+  -o, --output               Output file path (should have .puml suffix). Default: $PUML_RESULT_FILE
+  -p, --paths                Path(s) to model directories (mandatory).
                              For multiple paths: put them in double quotes and separated by space. Ex.: -p "one/path other/path"
   -k, --packages             Puts all classes in their packages
-  -l, --length               Length of association connectors. Default '---'
-  -w, --workdir              Presumes, all relevant files are already in a workdir
+  -l, --length               Length of association connectors. Default: $CONNECTOR
   -r, --print-target-role    Print the targetRolePlural attribute on the composition arrow.
-  -s, --add-super-type       Adds inheritance of super types.
+  -s, --add-super-type       Adds inheritance of super types that are NOT present under the scanned models.
+  -a, --add-associations     Adds associations to classes that are NOT present under the scanned models.
+  -pl, --package-limit        Limit the diagram to a package and it's associations
   -m, --model-type           [policy | product] default: policy
-  -a, --add-product          Adds association to product / policy
-  -g, --group-classes        Group classes together using last directory in path
+  -pr, --add-product         Adds association to product / policy
   -h, --help                 Show this help
 EOT
     exit 3
@@ -58,10 +59,6 @@ args() {
                                     PATHS_TO_DIR="$1"
                                     shift
                                     ;;
-      -w|--workdir )                shift
-                                    WORKDIR="$1"
-                                    shift
-                                    ;;
       -m|--model-type )             shift
                                     MODEL_TYPE="$1"
                                     shift
@@ -76,10 +73,14 @@ args() {
       -s|--add-super-type )         OPTIONS="$OPTIONS --stringparam addSuperType true"
                                     shift
                                     ;;
-      -g| --group-classes )         OPTIONS="$OPTIONS --stringparam groupClasses true"
+      -a|--add-associations )       OPTIONS="$OPTIONS --stringparam addAssociations true"
                                     shift
                                     ;;
-      -a|--add-product )            P_ASSOCIATION="true"
+      -pl| --package-limit )        shift
+                                    OPTIONS="$OPTIONS --stringparam limit $1"
+                                    shift
+                                    ;;
+      -pr|--add-product )           P_ASSOCIATION="true"
                                     shift
                                     ;;
       -k|--packages )               OPTIONS="$OPTIONS --stringparam packages true"
@@ -96,6 +97,11 @@ args() {
     esac
   done
 
+  if [[ "$PATHS_TO_DIR" == "" ]]; then
+    echo "Paths to model directories is mandatory. Exiting"
+    exit 3
+  fi
+
   if [[ "$MODEL_TYPE" == "product" ]]; then
     FILE_SUFFIX=$PRODUCT_FILE_SUFFIX
     CLASS_TAG=$PRODUCT_CLASS_TAG
@@ -107,18 +113,17 @@ args() {
   fi
 
   OPTIONS="$OPTIONS --stringparam connector $CONNECTOR"
-  OPTIONS="$OPTIONS --stringparam args $ARGS"
 }
 
 retrieve_files() {
-  echo "retrieving files..."
+  echo "copying model files..."
   rm -rf $WORKDIR
+  mkdir -p $MODEL_DIR
 
   for path in $PATHS_TO_DIR; do
-    mydir="${path##*/}"
-    echo " --- $mydir"
-    mkdir -p $WORKDIR/$mydir
-    find "$path" -not -path '*/target/*' -path '*model*' -name "*.$FILE_SUFFIX" -exec cp '{}' $WORKDIR/$mydir \;
+    clean_path=$(echo "$path" | sed 's|/$||')
+    echo "copying $clean_path to $MODEL_DIR"
+    cp -r ${clean_path}/* $MODEL_DIR
   done
 }
 
@@ -128,11 +133,11 @@ create_collection() {
   echo '<?xml version="1.0" encoding="UTF-8"?>' > $COLLECTION_XML
   echo "<collection>" >> $COLLECTION_XML
 
-  scan_workdir_rec $WORKDIR
+  scan_modeldir_rec $MODEL_DIR
   echo "</collection>" >> $COLLECTION_XML
 }
 
-scan_workdir_rec() {
+scan_modeldir_rec() {
   local basedir=$1
   local subdir=$2
   local prefix=$3
@@ -144,7 +149,7 @@ scan_workdir_rec() {
   for file in $basedir/$subdir/*; do
     filename=${file##*/}
     if [[ -d $file ]]; then
-      scan_workdir_rec "$basedir" "$subdir/$filename" "$prefix$filename."
+      scan_modeldir_rec "$basedir" "$subdir/$filename" "$prefix$filename."
     else
       if [[ "${filename##*.}" = "$FILE_SUFFIX" ]]; then
         class="${prefix}${filename%*.*}"
@@ -164,22 +169,31 @@ scan_workdir_rec() {
 
 execute_xslt() {
   echo "executing xslt..."
-  if [[ "$PUML_RESULT_FILE" == "" ]]; then
-    xsltproc $OPTIONS ips2plant2.xsl $COLLECTION_XML
-  else
-    xsltproc $OPTIONS ips2plant2.xsl $COLLECTION_XML > $PUML_RESULT_FILE
-  fi
+  xsltproc $OPTIONS ips2plant.xsl $COLLECTION_XML >> $PUML_RESULT_FILE
+}
+
+start_puml() {
+  echo "@startuml" > $PUML_RESULT_FILE
+  echo "'Created with: $0 $@'" >> $PUML_RESULT_FILE
+  echo "hide empty members" >> $PUML_RESULT_FILE
+}
+
+end_puml() {
+  echo "@enduml" >> $PUML_RESULT_FILE
 }
 
 main() {
-  ARGS=$(echo $@  | sed 's/ /_/g')
   args "$@"
 
-#  retrieve_files
+  retrieve_files
 
   create_collection
 
+  start_puml "$@"
+
   execute_xslt
+
+  end_puml
 }
 
 main "$@"

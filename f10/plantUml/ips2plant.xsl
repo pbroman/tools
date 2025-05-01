@@ -2,11 +2,12 @@
 <xsl:stylesheet version="1.1" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
     <xsl:param name="printTargetRole"/>
     <xsl:param name="addSuperType"/>
+    <xsl:param name="addAssociations"/>
     <xsl:param name="addPolicyCmptType"/>
     <xsl:param name="addProductCmptType"/>
     <xsl:param name="packages"/>
     <xsl:param name="connector"/>
-    <xsl:param name="args"/>
+    <xsl:param name="limit"/>
 
     <xsl:variable name="policySpot">(V,lightSteelBlue)</xsl:variable>
     <xsl:variable name="productSpot">(P,deepSkyBlue)</xsl:variable>
@@ -19,13 +20,7 @@
     <xsl:output method="text"/>
 
     <xsl:template match="/">
-        <xsl:text>@startuml&#xa;</xsl:text>
-        <xsl:value-of select="concat($singleQuote, 'This diagram was created with args ', $args, $singleQuote, '&#xa;&#xa;' )"/>
-        <xsl:text>hide empty members&#xa;</xsl:text>
-
         <xsl:apply-templates/>
-
-        <xsl:text>@enduml&#xa;</xsl:text>
     </xsl:template>
 
     <xsl:template match="PolicyCmptType">
@@ -62,33 +57,44 @@
         </xsl:variable>
 
         <!-- Class -->
-        <xsl:if test="@abstract='true'">
-            <xsl:text>abstract </xsl:text>
+        <xsl:if test="$limit = '' or starts-with($classNameWithPackage, $limit)">
+            <xsl:if test="@abstract='true'">
+                <xsl:text>abstract </xsl:text>
+            </xsl:if>
+            <xsl:value-of select="concat('class ', $className, $classType, ' { &#xa;')"/>
+            <xsl:for-each select="Attribute">
+                <xsl:sort select="@name"/>
+                <xsl:variable name="attrType">
+                    <xsl:choose>
+                        <xsl:when test="@attributeType='changeable'">+</xsl:when>
+                        <xsl:when test="@attributeType='derived'">~</xsl:when>
+                        <xsl:when test="@attributeType='computed'">#</xsl:when>
+                        <xsl:when test="@attributeType='constant'">-</xsl:when>
+                    </xsl:choose>
+                </xsl:variable>
+                <xsl:value-of select="concat('  ', $attrType, @name, ': ', @datatype, '&#xa;')"/>
+            </xsl:for-each>
+            <xsl:text>}&#xa;</xsl:text>
         </xsl:if>
-        <xsl:value-of select="concat('class ', $className, $classType, ' { &#xa;')"/>
-        <xsl:for-each select="Attribute">
-            <xsl:sort select="@name"/>
-            <xsl:variable name="attrType">
-                <xsl:choose>
-                    <xsl:when test="@attributeType='changeable'">+</xsl:when>
-                    <xsl:when test="@attributeType='derived'">~</xsl:when>
-                    <xsl:when test="@attributeType='computed'">#</xsl:when>
-                    <xsl:when test="@attributeType='constant'">-</xsl:when>
-                </xsl:choose>
-            </xsl:variable>
-            <xsl:value-of select="concat('  ', $attrType, @name, ': ', @datatype, '&#xa;')"/>
-        </xsl:for-each>
-        <xsl:text>}&#xa;</xsl:text>
 
         <!-- Inheritance -->
-        <xsl:if test="@supertype and $addSuperType = 'true'">
-            <xsl:variable name="superType">
-                <xsl:call-template name="packaging-selector">
-                    <xsl:with-param name="clazz" select="@supertype" />
-                </xsl:call-template>
+        <xsl:if test="@supertype and ($limit = '' or starts-with($classNameWithPackage, $limit))">
+            <xsl:variable name="supertype">
+                <xsl:value-of select="@supertype"/>
             </xsl:variable>
-            <xsl:value-of select="concat('class ', $superType, $bb, $policySpot, $policyType, $ff, ' {} &#xa;')"/>
-            <xsl:value-of select="concat($superType, ' &lt;|', $connector, ' ', $className, '&#xa;')"/>
+            <xsl:variable name="isSupertypePresent">
+                <xsl:value-of select="../PolicyCmptType[@className=$supertype]"/>
+            </xsl:variable>
+            <!--xsl:value-of select="concat($singleQuote, 'debug: supertype ', $supertype, ' is present: ', $isSupertypePresent, '&#xa;')"/-->
+            <xsl:if test="$isSupertypePresent != '' or $addSuperType = 'true'">
+                <xsl:variable name="superType">
+                    <xsl:call-template name="packaging-selector">
+                        <xsl:with-param name="clazz" select="@supertype" />
+                    </xsl:call-template>
+                </xsl:variable>
+                <xsl:value-of select="concat('class ', $superType, $bb, $policySpot, $policyType, $ff, ' {} &#xa;')"/>
+                <xsl:value-of select="concat($superType, ' &lt;|', $connector, ' ', $className, '&#xa;')"/>
+            </xsl:if>
         </xsl:if>
 
         <!-- Product type relation -->
@@ -114,31 +120,39 @@
             <xsl:variable name="targetWithPackage">
                 <xsl:value-of select="@target"/>
             </xsl:variable>
-            <xsl:variable name="target">
-                <xsl:call-template name="packaging-selector">
-                    <xsl:with-param name="clazz" select="@target" />
-                </xsl:call-template>
+            <xsl:variable name="isCompTargetPresent">
+                <xsl:value-of select="../../PolicyCmptType[@className=$targetWithPackage]"/>
             </xsl:variable>
 
-            <xsl:variable name="targetMin">
-                <xsl:value-of
-                        select="../../PolicyCmptType[@className=$targetWithPackage]/Association[@associationType='reverseComp' and @target=$classNameWithPackage]/@minCardinality"/>
-            </xsl:variable>
-            <xsl:variable name="targetMax">
-                <xsl:value-of
-                        select="../../PolicyCmptType[@className=$targetWithPackage]/Association[@associationType='reverseComp' and @target=$classNameWithPackage]/@maxCardinality"/>
-            </xsl:variable>
+            <xsl:if test="$isCompTargetPresent != '' or $addAssociations = 'true'">
+                <xsl:variable name="target">
+                    <xsl:call-template name="packaging-selector">
+                        <xsl:with-param name="clazz" select="@target" />
+                    </xsl:call-template>
+                </xsl:variable>
 
-            <xsl:value-of select="$className"/>
-            <xsl:if test="$targetMin != '' and $targetMax != ''">
-                <xsl:value-of select="concat(' &quot;', $targetMin, '..', $targetMax, '&quot; ')"/>
+                <xsl:variable name="targetMin">
+                    <xsl:value-of
+                            select="../../PolicyCmptType[@className=$targetWithPackage]/Association[@associationType='reverseComp' and @target=$classNameWithPackage]/@minCardinality"/>
+                </xsl:variable>
+                <xsl:variable name="targetMax">
+                    <xsl:value-of
+                            select="../../PolicyCmptType[@className=$targetWithPackage]/Association[@associationType='reverseComp' and @target=$classNameWithPackage]/@maxCardinality"/>
+                </xsl:variable>
+
+                <xsl:if test="$limit = '' or starts-with($classNameWithPackage, $limit) or starts-with($targetWithPackage, $limit)">
+                    <xsl:value-of select="$className"/>
+                    <xsl:if test="$targetMin != '' and $targetMax != ''">
+                        <xsl:value-of select="concat(' &quot;', $targetMin, '..', $targetMax, '&quot; ')"/>
+                    </xsl:if>
+                    <xsl:value-of
+                            select="concat(' *', $connector, ' &quot;', @minCardinality, '..', @maxCardinality, '&quot; ', $target)"/>
+                    <xsl:if test="@targetRoleSingular and $printTargetRole = 'true'">
+                        <xsl:value-of select="concat(' : ', @targetRoleSingular)"/>
+                    </xsl:if>
+                    <xsl:text>&#xa;</xsl:text>
+                </xsl:if>
             </xsl:if>
-            <xsl:value-of
-                    select="concat(' *', $connector, ' &quot;', @minCardinality, '..', @maxCardinality, '&quot; ', $target)"/>
-            <xsl:if test="@targetRoleSingular and $printTargetRole = 'true'">
-                <xsl:value-of select="concat(' : ', @targetRoleSingular)"/>
-            </xsl:if>
-            <xsl:text>&#xa;</xsl:text>
         </xsl:for-each>
 
         <!-- Associations -->
@@ -148,12 +162,17 @@
                     <xsl:with-param name="clazz" select="@target" />
                 </xsl:call-template>
             </xsl:variable>
+            <xsl:variable name="isAssociationTargetPresent">
+                <xsl:value-of select="../../PolicyCmptType[@className=$target]"/>
+            </xsl:variable>
 
-            <xsl:value-of select="concat($target, ' .. ', $className)"/>
-            <xsl:if test="@targetRoleSingular and $printTargetRole = 'true'">
-                <xsl:value-of select="concat(' : ', @targetRoleSingular)"/>
+            <xsl:if test="($isAssociationTargetPresent != '' or $addAssociations = 'true') and ($limit = '' or starts-with($classNameWithPackage, $limit) or starts-with($target, $limit))">
+                <xsl:value-of select="concat($target, ' .. ', $className)"/>
+                <xsl:if test="@targetRoleSingular and $printTargetRole = 'true'">
+                    <xsl:value-of select="concat(' : ', @targetRoleSingular)"/>
+                </xsl:if>
+                <xsl:text>&#xa;</xsl:text>
             </xsl:if>
-            <xsl:text>&#xa;</xsl:text>
         </xsl:for-each>
 
         <!-- Aggregations -->
@@ -164,12 +183,18 @@
                 </xsl:call-template>
             </xsl:variable>
 
-            <xsl:value-of
-                    select="concat($className, ' o', $connector, ' &quot;', @minCardinality, '..', @maxCardinality, '&quot; ', $target)"/>
-            <xsl:if test="@targetRoleSingular and $printTargetRole = 'true'">
-                <xsl:value-of select="concat(' : ', @targetRoleSingular)"/>
+            <xsl:variable name="isAggrTargetPresent">
+                <xsl:value-of select="../../PolicyCmptType[@className=$target]"/>
+            </xsl:variable>
+
+            <xsl:if test="($isAggrTargetPresent != '' or $addAssociations = 'true') and ($limit = '' or starts-with($classNameWithPackage, $limit) or starts-with($target, $limit))">
+                <xsl:value-of
+                        select="concat($className, ' o', $connector, ' &quot;', @minCardinality, '..', @maxCardinality, '&quot; ', $target)"/>
+                <xsl:if test="@targetRoleSingular and $printTargetRole = 'true'">
+                    <xsl:value-of select="concat(' : ', @targetRoleSingular)"/>
+                </xsl:if>
+                <xsl:text>&#xa;</xsl:text>
             </xsl:if>
-            <xsl:text>&#xa;</xsl:text>
         </xsl:for-each>
 
     </xsl:template>
