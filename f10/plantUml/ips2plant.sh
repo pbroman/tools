@@ -17,8 +17,6 @@ COLLECTION_XML="ips2plantCollection.xml"
 MODEL_TYPE="policy"
 FILE_SUFFIX="ipspolicycmpttype"
 PRODUCT_FILE_SUFFIX="ipsproductcmpttype"
-CLASS_TAG="PolicyCmptType"
-PRODUCT_CLASS_TAG="ProductCmptType2"
 PUML_RESULT_FILE="output/ips-models.puml"
 OPTIONS=""
 CONNECTOR="--"
@@ -32,16 +30,19 @@ Usage: $0 [OPTIONS] <input>
 
 Options:
   -o, --output               Output file path (should have .puml suffix). Default: $PUML_RESULT_FILE
-  -p, --paths                Path(s) to model directories (mandatory).
-                             For multiple paths: put them in double quotes and separated by space. Ex.: -p "one/path other/path"
+  -p, --paths                Path(s) to model directories.
+                             For multiple paths: put them in double quotes and separated by space. Ex.: -p "one/path other/path".
+                             If no paths are given, we will work on whatever is in the workdir.
   -k, --packages             Puts all classes in their packages
-  -l, --length               Length of association connectors. Default: $CONNECTOR
+  -l, --connector-length     Length of association connectors. Default: $CONNECTOR
   -r, --print-target-role    Print the targetRolePlural attribute on the composition arrow.
   -s, --add-super-type       Adds inheritance of super types that are NOT present under the scanned models.
   -a, --add-associations     Adds associations to classes that are NOT present under the scanned models.
-  -pl, --package-limit        Limit the diagram to a package and it's associations
-  -m, --model-type           [policy | product] default: policy
-  -pr, --add-product         Adds association to product / policy
+  -pl, --package-limit       Limit the diagram to a package and it's associations
+  -t, --show-tables          Show tables
+  -et, --show-enum-types     Show enum types
+  -ea, --show-enum-assoc     Show enum associations
+  -pr, --show-product        Show product components
   -h, --help                 Show this help
 EOT
     exit 3
@@ -59,11 +60,7 @@ args() {
                                     PATHS_TO_DIR="$1"
                                     shift
                                     ;;
-      -m|--model-type )             shift
-                                    MODEL_TYPE="$1"
-                                    shift
-                                    ;;
-      -l|--length-type )            shift
+      -l|--connector-length )       shift
                                     CONNECTOR="$1"
                                     shift
                                     ;;
@@ -76,11 +73,20 @@ args() {
       -a|--add-associations )       OPTIONS="$OPTIONS --stringparam addAssociations true"
                                     shift
                                     ;;
+      -t|--show-tables )            OPTIONS="$OPTIONS --stringparam showTables true"
+                                    shift
+                                    ;;
+      -et|--show-enum-types )       OPTIONS="$OPTIONS --stringparam showEnumTypes true"
+                                    shift
+                                    ;;
+      -ea|--show-enum-assoc )       OPTIONS="$OPTIONS --stringparam showEnumAssociations true"
+                                    shift
+                                    ;;
       -pl| --package-limit )        shift
                                     OPTIONS="$OPTIONS --stringparam limit $1"
                                     shift
                                     ;;
-      -pr|--add-product )           P_ASSOCIATION="true"
+      -pr|--show-products )         OPTIONS="$OPTIONS --stringparam showProductComponents true"
                                     shift
                                     ;;
       -k|--packages )               OPTIONS="$OPTIONS --stringparam packages true"
@@ -96,21 +102,6 @@ args() {
                                     ;;
     esac
   done
-
-  if [[ "$PATHS_TO_DIR" == "" ]]; then
-    echo "Paths to model directories is mandatory. Exiting"
-    exit 3
-  fi
-
-  if [[ "$MODEL_TYPE" == "product" ]]; then
-    FILE_SUFFIX=$PRODUCT_FILE_SUFFIX
-    CLASS_TAG=$PRODUCT_CLASS_TAG
-    if [[ "$P_ASSOCIATION" == "true" ]]; then
-        OPTIONS="$OPTIONS --stringparam addPolicyCmptType true"
-    fi
-  elif [[ "$P_ASSOCIATION" == "true" ]]; then
-    OPTIONS="$OPTIONS --stringparam addProductCmptType true"
-  fi
 
   OPTIONS="$OPTIONS --stringparam connector $CONNECTOR"
 }
@@ -151,18 +142,21 @@ scan_modeldir_rec() {
     if [[ -d $file ]]; then
       scan_modeldir_rec "$basedir" "$subdir/$filename" "$prefix$filename."
     else
-      if [[ "${filename##*.}" = "$FILE_SUFFIX" ]]; then
+#      if [[ "${filename##*.}" = "$FILE_SUFFIX" ]]; then
         class="${prefix}${filename%*.*}"
         echo "Classname: $class"
         cat $file \
           | grep -v "<?xml" \
           |  sed 's/xmlns:xsi=".*"//' \
           |  sed 's|xmlns="http://www.faktorzehn.org"||' \
-          |  sed "s/<$CLASS_TAG\(.*\)>/<$CLASS_TAG className=\"$class\"\1>/" \
+          |  sed "s/<PolicyCmptType\(.*\)>/<PolicyCmptType className=\"$class\"\1>/" \
+          |  sed "s/<ProductCmptType2\(.*\)>/<ProductCmptType2 className=\"$class\"\1>/" \
+          |  sed "s/<EnumType\(.*\)>/<EnumType className=\"$class\"\1>/" \
+          |  sed "s/<TableStructure \(.*\)>/<TableStructure className=\"$class\" \1>/" \
           >> $COLLECTION_XML
-      else
-        echo "Skipping $filename"
-      fi
+#      else
+#        echo "Skipping $filename"
+#      fi
     fi
   done
 }
@@ -185,9 +179,10 @@ end_puml() {
 main() {
   args "$@"
 
-  retrieve_files
-
-  create_collection
+  if [[ "$PATHS_TO_DIR" != "" ]]; then
+    retrieve_files
+    create_collection
+  fi
 
   start_puml "$@"
 
