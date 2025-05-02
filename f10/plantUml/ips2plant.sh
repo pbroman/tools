@@ -13,20 +13,21 @@ set -e
 
 WORKDIR="workdir"
 MODEL_DIR="$WORKDIR/model"
-COLLECTION_XML="ips2plantCollection.xml"
+COLLECTION_XML="$WORKDIR/collection.xml"
 MODEL_TYPE="policy"
 FILE_SUFFIX="ipspolicycmpttype"
 PRODUCT_FILE_SUFFIX="ipsproductcmpttype"
-PUML_RESULT_FILE="output/ips-models.puml"
+OUTPUT_DIR=output
+PUML_RESULT_FILE="$OUTPUT_DIR/ips-models.puml"
 OPTIONS=""
 CONNECTOR="--"
 
 usage() {
     cat <<EOT
 
-$0 - template
+$0 - Script creating plantUml class diagrams from Faktor-IPS model classes
 
-Usage: $0 [OPTIONS] <input>
+Usage: $0 [OPTIONS]
 
 Options:
   -o, --output               Output file path (should have .puml suffix). Default: $PUML_RESULT_FILE
@@ -104,6 +105,7 @@ args() {
   done
 
   OPTIONS="$OPTIONS --stringparam connector $CONNECTOR"
+  mkdir -p $OUTPUT_DIR
 }
 
 retrieve_files() {
@@ -142,7 +144,7 @@ scan_modeldir_rec() {
     if [[ -d $file ]]; then
       scan_modeldir_rec "$basedir" "$subdir/$filename" "$prefix$filename."
     else
-#      if [[ "${filename##*.}" = "$FILE_SUFFIX" ]]; then
+      if [[ "${filename##*.}" =~ ^ips.* ]]; then
         class="${prefix}${filename%*.*}"
         echo "Classname: $class"
         cat $file \
@@ -154,9 +156,9 @@ scan_modeldir_rec() {
           |  sed "s/<EnumType\(.*\)>/<EnumType className=\"$class\"\1>/" \
           |  sed "s/<TableStructure \(.*\)>/<TableStructure className=\"$class\" \1>/" \
           >> $COLLECTION_XML
-#      else
-#        echo "Skipping $filename"
-#      fi
+      else
+        echo "Skipping $filename"
+      fi
     fi
   done
 }
