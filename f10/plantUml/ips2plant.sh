@@ -11,16 +11,16 @@
 #set -x
 set -e
 
-WORKDIR="workdir"
-MODEL_DIR="$WORKDIR/model"
-COLLECTION_XML="$WORKDIR/collection.xml"
+PARENT_PATH=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P)
+
+WORKDIR="$PARENT_PATH/workdir"
 MODEL_TYPE="policy"
 FILE_SUFFIX="ipspolicycmpttype"
 PRODUCT_FILE_SUFFIX="ipsproductcmpttype"
-OUTPUT_DIR=output
+OUTPUT_DIR="$PARENT_PATH/output"
 PUML_RESULT_FILE="$OUTPUT_DIR/ips-models.puml"
 OPTIONS=""
-CONNECTOR="--"
+LENGTH=2
 
 usage() {
     cat <<EOT
@@ -34,15 +34,18 @@ Options:
   -p, --paths                Path(s) to model directories.
                              For multiple paths: put them in double quotes and separated by space. Ex.: -p "one/path other/path".
                              If no paths are given, we will work on whatever is in the workdir.
+  -w, --workdir              Path to working directory with collected ips files. Default: $WORKDIR
+                             BE CAREFUL: the entire workdir will be deleted at each run!
   -k, --packages             Puts all classes in their packages
-  -l, --connector-length     Length of association connectors. Default: $CONNECTOR
+  -l, --connector-length     Length of association connectors. Default: $LENGTH
   -r, --print-target-role    Print the targetRolePlural attribute on the composition arrow.
   -s, --add-super-type       Adds inheritance of super types that are NOT present under the scanned models.
   -a, --add-associations     Adds associations to classes that are NOT present under the scanned models.
   -pl, --package-limit       Limit the diagram to a package and it's associations
   -t, --show-tables          Show tables
+  -tu, --show-table-usage    Show table usage by product component types (including external tables)
   -et, --show-enum-types     Show enum types
-  -ea, --show-enum-assoc     Show enum associations
+  -ea, --show-enum-assoc     Show enum associations (including external enums)
   -pr, --show-product        Show product components
   -h, --help                 Show this help
 EOT
@@ -62,7 +65,7 @@ args() {
                                     shift
                                     ;;
       -l|--connector-length )       shift
-                                    CONNECTOR="$1"
+                                    LENGTH=$1
                                     shift
                                     ;;
       -r|--print-target-role )      OPTIONS="$OPTIONS --stringparam printTargetRole true"
@@ -75,6 +78,9 @@ args() {
                                     shift
                                     ;;
       -t|--show-tables )            OPTIONS="$OPTIONS --stringparam showTables true"
+                                    shift
+                                    ;;
+      -tu|--show-table-usage )      OPTIONS="$OPTIONS --stringparam showTableUsage true"
                                     shift
                                     ;;
       -et|--show-enum-types )       OPTIONS="$OPTIONS --stringparam showEnumTypes true"
@@ -93,6 +99,10 @@ args() {
       -k|--packages )               OPTIONS="$OPTIONS --stringparam packages true"
                                     shift
                                     ;;
+      -w|--workdir )                shift
+                                    WORKDIR=$1
+                                    shift
+                                    ;;
       -h|--help )                   usage
                                     ;;
       -*)                           echo "Unrecognized option $1"
@@ -104,7 +114,16 @@ args() {
     esac
   done
 
+  for i in $(seq 1 $LENGTH); do
+    CONNECTOR="${CONNECTOR}-"
+    DOTTED_CONNECTOR="${DOTTED_CONNECTOR}."
+  done
+
+  MODEL_DIR="$WORKDIR/model"
+  COLLECTION_XML="$WORKDIR/collection.xml"
+
   OPTIONS="$OPTIONS --stringparam connector $CONNECTOR"
+  OPTIONS="$OPTIONS --stringparam dottedConnector $DOTTED_CONNECTOR"
   mkdir -p $OUTPUT_DIR
 }
 
@@ -165,7 +184,7 @@ scan_modeldir_rec() {
 
 execute_xslt() {
   echo "executing xslt..."
-  xsltproc $OPTIONS ips2plant.xsl $COLLECTION_XML >> $PUML_RESULT_FILE
+  xsltproc $OPTIONS ${PARENT_PATH}/ips2plant.xsl $COLLECTION_XML >> $PUML_RESULT_FILE
 }
 
 start_puml() {

@@ -15,12 +15,16 @@ A bash script using XSL to create plantUml class diagrams from [Faktor-IPS](http
 ## Usage
 See `./ips2plant-sh -h` or `.\ips2plantDocker.bat <repos_path> -h`
 
+## Attribute Types
+Attribute visibility markers are misused for Faktor-IPS attribute types:
+![Attribute Type Legend](docu/attr_type_legend.png)
+
 ## Example
 Let's say you have Faktor-IPS model classes in `<path_to_repos>/im/domain/model` and `<path_to_repos>/ipm/business/model`.
 The first thing you may do, is to execute `./ips2plant.sh -o output/my-test.puml -p "<path_to_repos>/im/domain/model <path_to_repos>/ipm/business/model"`. 
 This will copy all the model files to the working directory, put them in an XML file, and execute the XSL transformation to create the plantUml. 
 
-Once you have created the XML with all the classes, you can omit the path argument and try different options for the created class diagram. You can for instance use `-r -s -a -k` for adding role names on associations, external supertypes, external associations and packaging. 
+Once you have created the XML with all the classes, you can omit the path argument and try different options for the created class diagram. You can for instance use `-r -s -a -k` for adding role names on associations, external supertypes, external associations, and packaging. 
 
-Adding `-et -ea -t -pr` gives you enum types and associations, table structures, and product types. And `-pl <my_package>` limits the view to a certain package. Play around with it and have fun. :)
+Adding `-et -ea -pr -t -tu` gives you enum types and associations, product types, table structures, and table usage. And `-pl <my_package>` limits the view to a certain package. Play around with it and have fun. :)
 

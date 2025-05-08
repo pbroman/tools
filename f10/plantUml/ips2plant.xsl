@@ -3,14 +3,15 @@
     <xsl:param name="printTargetRole"/>
     <xsl:param name="addSuperType"/>
     <xsl:param name="addAssociations"/>
-    <xsl:param name="addPolicyCmptType"/>
     <xsl:param name="addProductCmptType"/>
     <xsl:param name="showProductComponents"/>
     <xsl:param name="showTables"/>
     <xsl:param name="showEnumTypes"/>
     <xsl:param name="showEnumAssociations"/>
+    <xsl:param name="showTableUsage"/>
     <xsl:param name="packages"/>
     <xsl:param name="connector"/>
+    <xsl:param name="dottedConnector"/>
     <xsl:param name="limit"/>
 
     <xsl:variable name="policySpot">(V,lightSteelBlue)</xsl:variable>
@@ -115,13 +116,14 @@
             </xsl:if>
 
             <!-- Product type relation -->
-            <xsl:if test="@productCmptType and $showProductComponents = 'true' and starts-with(@productCmptType, $limit)">
-                <xsl:value-of select="concat($className, ' ..# ', @productCmptType, '&#xa;')"/>
-            </xsl:if>
+            <xsl:if test="$componentType = 'PolicyCmptType' and @productCmptType and $showProductComponents = 'true' and starts-with(@productCmptType, $limit)">
+                <xsl:variable name="productPackaging">
+                    <xsl:call-template name="packaging-selector">
+                        <xsl:with-param name="clazz" select="@productCmptType" />
+                    </xsl:call-template>
+                </xsl:variable>
 
-            <!-- Policy type relation -->
-            <xsl:if test="@policyCmptType and $addPolicyCmptType = 'true' and starts-with(@policyCmptType, $limit)">
-                <xsl:value-of select="concat($className, ' ..# ', @policyCmptType, '&#xa;')"/>
+                <xsl:value-of select="concat($className, ' ', $dottedConnector, '# ', $productPackaging, '&#xa;')"/>
             </xsl:if>
 
             <!-- Compositions (only in PolicyCmptTypes) -->
@@ -133,9 +135,10 @@
                     <xsl:value-of select="../../PolicyCmptType[@className=$targetWithPackage]"/>
                 </xsl:variable>
 
-                <xsl:if test="starts-with($classNameWithPackage, $limit) and starts-with($targetWithPackage, $limit)
-                                 or ((starts-with($classNameWithPackage, $limit) or starts-with($targetWithPackage, $limit)) and $addAssociations = 'true')
-                                    and ($isCompTargetPresent != '' or $addAssociations = 'true')">
+                <xsl:if test="($isCompTargetPresent != '' or $addAssociations = 'true')
+                                    and ((starts-with($classNameWithPackage, $limit) or starts-with($targetWithPackage, $limit)) and $addAssociations = 'true'
+                                                         or (starts-with($classNameWithPackage, $limit) and starts-with($targetWithPackage, $limit)))">
+
                     <xsl:variable name="target">
                         <xsl:call-template name="packaging-selector">
                             <xsl:with-param name="clazz" select="@target" />
@@ -181,7 +184,7 @@
                 <xsl:if test="($isAssociationTargetPresent != '' or $addAssociations = 'true')
                                     and ((starts-with($classNameWithPackage, $limit) or starts-with($target, $limit)) and $addAssociations = 'true'
                                                          or (starts-with($classNameWithPackage, $limit) and starts-with($target, $limit)))">
-                    <xsl:value-of select="concat($target, ' .. ', $className)"/>
+                    <xsl:value-of select="concat($target, ' ', $dottedConnector, ' ', $className)"/>
                     <xsl:if test="@targetRoleSingular and $printTargetRole = 'true'">
                         <xsl:value-of select="concat(' : ', @targetRoleSingular)"/>
                     </xsl:if>
@@ -215,6 +218,14 @@
                     <xsl:text>&#xa;</xsl:text>
                 </xsl:if>
             </xsl:for-each>
+
+            <!-- Table Structure Usage -->
+            <xsl:for-each select="TableStructureUsage/TableStructure">
+                <xsl:call-template name="table-usage">
+                    <xsl:with-param name="tableStructure" select="@tableStructure" />
+                    <xsl:with-param name="className" select="$className" />
+                </xsl:call-template>
+            </xsl:for-each>
         </xsl:if>
     </xsl:template>
 
@@ -232,7 +243,11 @@
             </xsl:variable>
 
             <xsl:variable name="classType">
-                <xsl:value-of select="concat($bb, $enumTypeSpot, 'EnumType', $ff)"/>
+                <xsl:value-of select="$bb"/>
+                <xsl:if test="not(@abstract)">
+                    <xsl:value-of select="$enumTypeSpot"/>
+                </xsl:if>
+                <xsl:value-of select="concat('EnumType', $ff)"/>
             </xsl:variable>
 
             <!-- Class -->
@@ -289,7 +304,7 @@
             </xsl:variable>
 
             <xsl:variable name="classType">
-                <xsl:value-of select="concat($bb, $tableStructureSpot, 'EnumType', $ff)"/>
+                <xsl:value-of select="concat($bb, $tableStructureSpot, 'TableStructure', $ff)"/>
             </xsl:variable>
 
             <!-- Class -->
@@ -331,7 +346,23 @@
             </xsl:call-template>
         </xsl:variable>
         <xsl:if test="$isEnumPresent != '' and $showEnumAssociations">
-            <xsl:value-of select="concat($className, ' ..> ', $enumTypePackaging, '&#xa;')"/>
+            <xsl:value-of select="concat($className, ' ', $dottedConnector, '> ', $enumTypePackaging, '&#xa;')"/>
+        </xsl:if>
+    </xsl:template>
+
+    <xsl:template name="table-usage">
+        <xsl:param name="tableStructure" />
+        <xsl:param name="className" />
+        <xsl:variable name="isTablePresent">
+            <xsl:value-of select="../../../TableStructure[@className=$tableStructure]"/>
+        </xsl:variable>
+        <xsl:variable name="tableStructurePackaging">
+            <xsl:call-template name="packaging-selector">
+                <xsl:with-param name="clazz" select="$tableStructure" />
+            </xsl:call-template>
+        </xsl:variable>
+        <xsl:if test="starts-with($className, $limit) and $showTableUsage">
+            <xsl:value-of select="concat($className, ' ', $dottedConnector, '{ ', $tableStructurePackaging, '&#xa;')"/>
         </xsl:if>
     </xsl:template>
 
