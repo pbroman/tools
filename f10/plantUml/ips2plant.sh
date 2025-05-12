@@ -35,13 +35,13 @@ Options:
                              For multiple paths: put them in double quotes and separated by space. Ex.: -p "one/path other/path".
                              If no paths are given, we will work on whatever is in the workdir.
   -w, --workdir              Path to working directory with collected ips files. Default: $WORKDIR
-                             BE CAREFUL: the entire workdir will be deleted at each run!
+  -dw, --delete-workdir      Delete workdir before incorporating new paths (only applicable together with -p).
   -k, --packages             Puts all classes in their packages
   -l, --connector-length     Length of association connectors. Default: $LENGTH
   -r, --print-target-role    Print the targetRolePlural attribute on the composition arrow.
   -s, --add-super-type       Adds inheritance of super types that are NOT present under the scanned models.
   -a, --add-associations     Adds associations to classes that are NOT present under the scanned models.
-  -pl, --package-limit       Limit the diagram to a package and it's associations
+  -pf, --package-filter      Filter the diagram to a package and it's associations
   -t, --show-tables          Show tables
   -tu, --show-table-usage    Show table usage by product component types (including external tables)
   -et, --show-enum-types     Show enum types
@@ -89,8 +89,8 @@ args() {
       -ea|--show-enum-assoc )       OPTIONS="$OPTIONS --stringparam showEnumAssociations true"
                                     shift
                                     ;;
-      -pl| --package-limit )        shift
-                                    OPTIONS="$OPTIONS --stringparam limit $1"
+      -pf| --package-filter )       shift
+                                    OPTIONS="$OPTIONS --stringparam packageFilter $1"
                                     shift
                                     ;;
       -pr|--show-products )         OPTIONS="$OPTIONS --stringparam showProductComponents true"
@@ -101,6 +101,9 @@ args() {
                                     ;;
       -w|--workdir )                shift
                                     WORKDIR=$1
+                                    shift
+                                    ;;
+      -dw|--delete-workdir )        DELETE_WORKDIR="true"
                                     shift
                                     ;;
       -h|--help )                   usage
@@ -129,7 +132,9 @@ args() {
 
 retrieve_files() {
   echo "copying model files..."
-  rm -rf $WORKDIR
+  if [[ "$DELETE_WORKDIR" == "true" ]]; then
+    rm -rf $WORKDIR
+  fi
   mkdir -p $MODEL_DIR
 
   for path in $PATHS_TO_DIR; do
