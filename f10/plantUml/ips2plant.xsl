@@ -16,7 +16,6 @@
 
     <xsl:variable name="policySpot">(V,lightSteelBlue)</xsl:variable>
     <xsl:variable name="productSpot">(P,deepSkyBlue)</xsl:variable>
-    <xsl:variable name="enumTypeSpot">(E,MediumSeaGreen)</xsl:variable>
     <xsl:variable name="tableStructureSpot">(T,LightSalmon)</xsl:variable>
     <xsl:variable name="policyType">PolicyCmptType</xsl:variable>
     <xsl:variable name="productType">ProductCmptType</xsl:variable>
@@ -245,7 +244,15 @@
             <xsl:variable name="classType">
                 <xsl:value-of select="$bb"/>
                 <xsl:if test="not(@abstract)">
-                    <xsl:value-of select="$enumTypeSpot"/>
+                    <xsl:text>(E,</xsl:text>
+                    <xsl:choose>
+                        <xsl:when test="@extensible">
+                            <xsl:text>MediumSpringGreen) extensible </xsl:text>
+                        </xsl:when>
+                        <xsl:otherwise>
+                            <xsl:text>MediumSeaGreen)</xsl:text>
+                        </xsl:otherwise>
+                    </xsl:choose>
                 </xsl:if>
                 <xsl:value-of select="concat('EnumType', $ff)"/>
             </xsl:variable>
@@ -266,7 +273,18 @@
                     </xsl:variable>
                     <xsl:value-of select="concat('  ', @name, ': ', $datatype, '&#xa;')"/>
                 </xsl:for-each>
+
+                <xsl:for-each select="EnumValue">
+                    <xsl:value-of select="concat('  ',./EnumLiteralNameAttributeValue, ' (', ./EnumAttributeValue[1], ')&#xa;')"/>
+                </xsl:for-each>
                 <xsl:text>}&#xa;</xsl:text>
+
+                <xsl:for-each select="EnumAttribute">
+                    <xsl:call-template name="enum-association">
+                        <xsl:with-param name="enumType" select="@datatype" />
+                        <xsl:with-param name="className" select="$className" />
+                    </xsl:call-template>
+                </xsl:for-each>
             </xsl:if>
 
             <!-- Inheritance -->
