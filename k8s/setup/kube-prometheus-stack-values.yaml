@@ -1,0 +1,5 @@
+nodeExporter:
+  enabled: false
+# If you don't want the alertmanager, disable it:
+alertmanager:
+  enabled: false
